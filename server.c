@@ -15,9 +15,11 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "lib/socklib.h"
 #include "common.h"
+#include "threadpool.c"
 
 extern int errno;
 
@@ -25,11 +27,33 @@ int   setup_listen(char *socketNumber);
 char *read_request(int fd);
 char *process_request(char *request, int *response_length);
 void  send_response(int fd, char *response, int response_length);
+int NUM_LOOPS = 500000;
 
 /**
 * This program should be invoked as "./server <socketnumber>", for
 * example, "./server 4342".
 */
+void do_request(void* socket){
+    int socket_talk = (int) socket;
+    char *request = NULL;
+    char *response = NULL;
+    request = read_request(socket_talk);  // step 2
+    if (request != NULL) {
+        int response_length;
+
+    response = process_request(request, &response_length);  // step 3
+        if (response != NULL) {
+            send_response(socket_talk, response, response_length);  // step 4
+        }
+    }
+    close(socket_talk);  // step 5
+
+    // clean up allocated memory, if any
+    if (request != NULL)
+    free(request);
+    if (response != NULL)
+    free(response);
+}
 
 int main(int argc, char **argv)
 {
@@ -37,12 +61,19 @@ int main(int argc, char **argv)
     int  socket_listen;
     int  socket_talk;
     int  dummy, len;
+    int numThreads = 1;
 
-    if (argc != 2)
+    if (argc < 2)
     {
         fprintf(stderr, "(SERVER): Invoke as  './server socknum'\n");
         fprintf(stderr, "(SERVER): for example, './server 4434'\n");
         exit(-1);
+    }
+    if(argc > 2){
+        numThreads = atoi(argv[2]);
+    }
+    if(argc > 3){
+        NUM_LOOPS = atoi(argv[3]);
     }
 
     /*
@@ -70,34 +101,28 @@ int main(int argc, char **argv)
     *
     *  5) Close the data socket associated with the connection
     */
-
+    threadpool threadpool = create_threadpool(numThreads);
+    struct timeval start, stop;
+    gettimeofday(&start,NULL);
+    double dispatch_count = 0;
     while(1) {
-        char *request = NULL;
-        char *response = NULL;
 
-        socket_talk = saccept(socket_listen);  // step 1
+        socket_talk = saccept(socket_listen) ; // step 1
         if (socket_talk < 0) {
             fprintf(stderr, "An error occured in the server; a connection\n");
             fprintf(stderr, "failed because of ");
             perror("");
             exit(1);
         }
-        request = read_request(socket_talk);  // step 2
-        if (request != NULL) {
-            int response_length;
-
-            response = process_request(request, &response_length);  // step 3
-            if (response != NULL) {
-                send_response(socket_talk, response, response_length);  // step 4
-            }
+        dispatch_count++;
+        if(dispatch_count > 50){
+            gettimeofday(&stop,NULL);
+            printf("Dispatch count: %f, start time: %d, end time: %d\n",dispatch_count,start.tv_usec,stop.tv_usec);
+            printf("%f\n",dispatch_count / (stop.tv_usec - start.tv_usec) * 100000);
+            gettimeofday(&start,NULL);
+            dispatch_count = 0;
         }
-        close(socket_talk);  // step 5
-
-        // clean up allocated memory, if any
-        if (request != NULL)
-        free(request);
-        if (response != NULL)
-        free(response);
+        dispatch(threadpool,do_request,(void *)socket_talk);
     }
 }
 
@@ -147,8 +172,6 @@ char *read_request(int fd) {
 * This is where all of the hard work happens.
 * This function is thread-safe.
 */
-
-#define NUM_LOOPS 500000
 
 char *process_request(char *request, int *response_length) {
     char *response = (char *) malloc(RESPONSE_SIZE*sizeof(char));

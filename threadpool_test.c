@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
   dispatch(tp, dispatch_to_me, (void *) 7);
 
   fprintf(stdout, "**main** done first\n");
-  sleep(20);
+  sleep(5);
   fprintf(stdout, "\n\n");
 
   fprintf(stdout, "**main** dispatch 3\n");
@@ -45,7 +45,9 @@ int main(int argc, char **argv) {
   dispatch(tp, dispatch_to_me, (void *) 7);
 
   fprintf(stdout, "**main done second\n");
-  sleep(20);
+  sleep(5);
+  fprintf(stdout,"Destroying threadpool\n");
+  destroy_threadpool(tp);
   exit(-1);
 }
 
