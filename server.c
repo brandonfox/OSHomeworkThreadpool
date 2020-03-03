@@ -63,6 +63,8 @@ int main(int argc, char **argv)
     int  dummy, len;
     int numThreads = 1;
 
+    FILE *outFile = stdout;
+
     if (argc < 2)
     {
         fprintf(stderr, "(SERVER): Invoke as  './server socknum'\n");
@@ -74,6 +76,13 @@ int main(int argc, char **argv)
     }
     if(argc > 3){
         NUM_LOOPS = atoi(argv[3]);
+    }
+    if(argc > 4){
+        outFile = fopen(argv[4],"w");
+        if(outFile == NULL){
+            printf("Couldnt open file %s\n",argv[4]);
+            exit(-1);
+        }
     }
 
     /*
@@ -115,10 +124,13 @@ int main(int argc, char **argv)
             exit(1);
         }
         dispatch_count++;
+        //This is for performance logging
         if(dispatch_count > 50){
             gettimeofday(&stop,NULL);
-            printf("Dispatch count: %f, start time: %d, end time: %d\n",dispatch_count,start.tv_usec,stop.tv_usec);
-            printf("%f\n",dispatch_count / (stop.tv_usec - start.tv_usec) * 100000);
+            long sta = start.tv_sec * 1000000 + start.tv_usec; //In microseconds
+            long sto = stop.tv_sec * 1000000 + stop.tv_usec;
+            fprintf(outFile,"%f\n",dispatch_count / (sto - sta) * 1000000);
+            fflush(outFile);
             gettimeofday(&start,NULL);
             dispatch_count = 0;
         }
